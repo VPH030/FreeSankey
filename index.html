@@ -1,0 +1,881 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Revenue → Cost Sankey Builder</title>
+<style>
+  :root{
+    --ink:#1b2430;
+    --ink-soft:#5b6675;
+    --line:#d8dee6;
+    --paper:#fbfaf7;
+    --panel:#ffffff;
+    --accent:#2f5d50;
+    --accent-soft:#eaf1ee;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif;
+    background:var(--paper);
+    color:var(--ink);
+  }
+  header{
+    padding:28px 32px 18px;
+    border-bottom:1px solid var(--line);
+  }
+  header h1{
+    margin:0 0 4px;
+    font-size:22px;
+    font-weight:600;
+    letter-spacing:-0.01em;
+  }
+  header p{
+    margin:0;
+    color:var(--ink-soft);
+    font-size:14px;
+  }
+  .layout{
+    display:grid;
+    grid-template-columns:420px 1fr;
+    gap:0;
+    min-height:calc(100vh - 84px);
+  }
+  .panel{
+    border-right:1px solid var(--line);
+    padding:24px;
+    overflow-y:auto;
+    max-height:calc(100vh - 84px);
+  }
+  .canvas-wrap{
+    padding:24px;
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    gap:16px;
+  }
+  fieldset{
+    border:1px solid var(--line);
+    border-radius:6px;
+    padding:14px 16px 16px;
+    margin:0 0 16px;
+  }
+  legend{
+    font-size:12px;
+    font-weight:600;
+    color:var(--ink-soft);
+    padding:0 6px;
+  }
+  label{
+    display:block;
+    font-size:12px;
+    color:var(--ink-soft);
+    margin:10px 0 4px;
+  }
+  input[type=number],input[type=text]{
+    width:100%;
+    padding:7px 9px;
+    border:1px solid var(--line);
+    border-radius:4px;
+    font-size:14px;
+    font-family:inherit;
+    background:var(--panel);
+    color:var(--ink);
+  }
+  input[type=color]{
+    width:36px;
+    height:28px;
+    border:1px solid var(--line);
+    border-radius:4px;
+    padding:0;
+    background:none;
+    cursor:pointer;
+    vertical-align:middle;
+  }
+  .row{
+    display:grid;
+    grid-template-columns:1fr 78px 78px 40px;
+    gap:8px;
+    align-items:center;
+    margin-bottom:8px;
+  }
+  .row-head{
+    display:grid;
+    grid-template-columns:1fr 78px 78px 40px;
+    gap:8px;
+    font-size:11px;
+    color:var(--ink-soft);
+    margin-bottom:4px;
+  }
+  .cost-item{
+    margin-bottom:10px;
+    padding-bottom:8px;
+    border-bottom:1px dashed var(--line);
+  }
+  .cost-item:last-child{border-bottom:none; margin-bottom:0; padding-bottom:0;}
+  .cost-item .afterLabel{
+    width:100%;
+    margin-top:4px;
+    padding:5px 8px;
+    border:1px solid var(--line);
+    border-radius:4px;
+    font-size:12px;
+    font-family:inherit;
+    color:var(--ink);
+    background:var(--panel);
+  }
+  .stage-row{
+    display:grid;
+    grid-template-columns:1fr 40px;
+    gap:8px;
+    align-items:center;
+    margin-top:4px;
+  }
+  .stage-row .afterLabel{margin-top:0;}
+  .count-row{
+    display:flex;
+    gap:10px;
+  }
+  .count-row > div{flex:1;}
+  button{
+    font-family:inherit;
+    font-size:13px;
+    font-weight:600;
+    padding:9px 14px;
+    border-radius:5px;
+    border:1px solid var(--accent);
+    background:var(--accent);
+    color:#fff;
+    cursor:pointer;
+  }
+  button.secondary{
+    background:var(--panel);
+    color:var(--accent);
+  }
+  button.small{
+    padding:4px 8px;
+    font-size:12px;
+    border-radius:4px;
+  }
+  .btn-row{
+    display:flex;
+    gap:8px;
+    margin-top:4px;
+  }
+  .hint{
+    font-size:12px;
+    color:var(--ink-soft);
+    line-height:1.5;
+    margin-top:4px;
+  }
+  .chart-card{
+    background:var(--panel);
+    border:1px solid var(--line);
+    border-radius:8px;
+    padding:20px;
+  }
+  svg{display:block;}
+  .node-label{font-size:12.5px;fill:var(--ink);font-weight:600;}
+  .node-value{font-size:11.5px;fill:var(--ink-soft);}
+  .summary{
+    display:flex;
+    gap:24px;
+    font-size:13px;
+    color:var(--ink-soft);
+  }
+  .summary b{color:var(--ink);}
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Revenue → Cost Sankey Builder</h1>
+  <p>Set your revenue sources and cost items, generate the chart, then screenshot it for your slides.</p>
+</header>
+
+<div class="layout">
+  <div class="panel">
+
+    <fieldset>
+      <legend>Structure</legend>
+      <div class="count-row">
+        <div>
+          <label for="numRev">Revenue sources</label>
+          <input type="number" id="numRev" min="1" max="10" value="3">
+        </div>
+        <div>
+          <label for="numCost">Cost items</label>
+          <input type="number" id="numCost" min="1" max="10" value="4">
+        </div>
+      </div>
+      <div class="btn-row">
+        <button type="button" class="secondary small" id="btnBuildRows">Set up fields</button>
+      </div>
+      <p class="hint">Costs are subtracted in the order listed, left to right, each one peeling off what's left after the previous one.</p>
+    </fieldset>
+
+    <fieldset>
+      <legend>Title</legend>
+      <label for="companyName">Company name</label>
+      <input type="text" id="companyName" placeholder="e.g. Acme Materials SRL">
+      <label for="periodLabel">Period / timing</label>
+      <input type="text" id="periodLabel" placeholder="e.g. Q3 2026 or FY2025">
+      <label for="compLabel">Comparison period label (optional)</label>
+      <input type="text" id="compLabel" placeholder="e.g. vs Q3 2025">
+      <p class="hint">Shown as the chart's title, with the revenue/cost/net tally underneath as a subtitle. One comparison period applies to the whole chart: fill the "Prior" column for every source and cost, and each node shows its % change under its name. Leave a Prior cell blank and the nodes that depend on it show no %.</p>
+    </fieldset>
+
+    <fieldset>
+      <legend>Revenue sources</legend>
+      <div class="row-head"><span>Name</span><span>Amount</span><span>Prior</span><span>Color</span></div>
+      <div id="revRows"></div>
+    </fieldset>
+
+    <fieldset>
+      <legend>Cost items (in order)</legend>
+      <div class="row-head"><span>Name</span><span>Amount</span><span>Prior</span><span>Color</span></div>
+      <div id="costRows"></div>
+    </fieldset>
+
+    <fieldset>
+      <legend>Net result & flow</legend>
+      <label for="netLabel">Net result label</label>
+      <input type="text" id="netLabel" value="Net Result">
+      <label for="totalLabel" style="margin-top:12px;">Total Revenue label</label>
+      <input type="text" id="totalLabel" value="Total Revenue">
+      <div class="row" style="grid-template-columns:1fr 44px;margin-top:8px;">
+        <label style="margin:0;">Total Revenue color</label>
+        <input type="color" id="totalColor" value="#3d4550">
+      </div>
+      <div class="row" style="grid-template-columns:1fr 44px;">
+        <label style="margin:0;">Net result color</label>
+        <input type="color" id="netColor" value="#2f7050">
+      </div>
+      <p class="hint">Each cost item below also has a "stage color": it tints that stage's bar and the flow ribbon leading into it.</p>
+      <label for="unit">Currency / unit prefix (optional)</label>
+      <input type="text" id="unit" placeholder="e.g. $ or RON ">
+    </fieldset>
+
+    <div class="btn-row">
+      <button type="button" id="btnRender">Render chart</button>
+      <button type="button" class="secondary" id="btnPNG">Download PNG</button>
+    </div>
+    <p class="hint" id="statusMsg"></p>
+
+    <fieldset style="margin-top:16px;">
+      <legend>Saved settings</legend>
+      <div class="btn-row" style="flex-wrap:wrap;">
+        <button type="button" class="secondary small" id="btnSave">Save settings</button>
+        <button type="button" class="secondary small" id="btnExport">Export to file</button>
+        <button type="button" class="secondary small" id="btnImport">Import from file</button>
+        <button type="button" class="secondary small" id="btnClear">Clear saved</button>
+      </div>
+      <input type="file" id="importFile" accept=".json,application/json" style="display:none;">
+      <p class="hint">Save keeps names, amounts, prior-period figures, colors, labels and currency in this browser and reloads them automatically when you reopen the file. Export/Import makes a backup file you can keep or move to another computer.</p>
+    </fieldset>
+  </div>
+
+  <div class="canvas-wrap">
+    <div class="chart-card">
+      <svg id="chart" width="900" height="560"></svg>
+    </div>
+  </div>
+</div>
+
+<script>
+const revRows = document.getElementById('revRows');
+const costRows = document.getElementById('costRows');
+const svg = document.getElementById('chart');
+const statusMsg = document.getElementById('statusMsg');
+
+const DEFAULT_REV_COLORS = ['#2f5d50','#3d7a68','#6fa287','#a3c4b1','#c9dccf'];
+const DEFAULT_COST_COLORS = ['#c0392b','#cf5a45','#d97a5f','#e39a7f','#eebca5'];
+const DEFAULT_STAGE_COLORS = ['#5c9a78','#4a8a68','#3a7a58','#2f7050'];
+const DEFAULT_REV_NAMES = ['Product sales','Service revenue','Licensing','Other revenue'];
+const DEFAULT_COST_NAMES = ['Cost of goods sold','Operating expenses','Interest & tax','Other costs'];
+const DEFAULT_AFTER_LABELS = ['Gross margin','EBITDA','Net profit',''];
+const FONT = 'Helvetica, Arial, sans-serif';
+const GOOD = '#2e7d4f', BAD = '#b5372b', NEUTRAL = '#5b6675';
+
+function shade(hex, f){ // darken toward black so light colors stay readable as text
+  const n = parseInt(hex.slice(1), 16);
+  const c = [(n>>16)&255, (n>>8)&255, n&255].map(v => Math.round(v*(1-f)));
+  return '#' + c.map(v => v.toString(16).padStart(2,'0')).join('');
+}
+
+function makeRow(container, defaultName, color){
+  const row = document.createElement('div');
+  row.className = 'row';
+  row.innerHTML = `
+    <input type="text" class="name" value="${defaultName}" placeholder="Name">
+    <input type="number" class="value" value="0" min="0" step="any">
+    <input type="number" class="prev" value="" min="0" step="any" placeholder="prior">
+    <input type="color" class="color" value="${color}">
+  `;
+  container.appendChild(row);
+}
+
+function makeCostRow(container, defaultName, color, defaultAfterLabel, stageColor, isLast){
+  const wrap = document.createElement('div');
+  wrap.className = 'cost-item';
+  wrap.innerHTML = `
+    <div class="row">
+      <input type="text" class="name" value="${defaultName}" placeholder="Cost name">
+      <input type="number" class="value" value="0" min="0" step="any">
+      <input type="number" class="prev" value="" min="0" step="any" placeholder="prior">
+      <input type="color" class="color" value="${color}">
+    </div>
+    <div class="stage-row">
+      <input type="text" class="afterLabel" value="${isLast ? '' : (defaultAfterLabel || '')}"
+        placeholder="${isLast ? 'Last cost: stage = Net result (label & color set below)' : 'Label for the running total after this cost (e.g. Gross margin) — optional'}"
+        ${isLast ? 'disabled' : ''}>
+      <input type="color" class="stageColor" value="${stageColor}" title="Stage color" ${isLast ? 'disabled' : ''}>
+    </div>
+  `;
+  container.appendChild(wrap);
+}
+
+function buildRows(){
+  const numRev = Math.max(1, Math.min(10, parseInt(document.getElementById('numRev').value) || 1));
+  const numCost = Math.max(1, Math.min(10, parseInt(document.getElementById('numCost').value) || 1));
+
+  revRows.innerHTML = '';
+  costRows.innerHTML = '';
+
+  for(let i=0;i<numRev;i++){
+    makeRow(revRows, DEFAULT_REV_NAMES[i] || `Revenue ${i+1}`, DEFAULT_REV_COLORS[i % DEFAULT_REV_COLORS.length]);
+  }
+  for(let i=0;i<numCost;i++){
+    makeCostRow(costRows,
+      DEFAULT_COST_NAMES[i] || `Cost ${i+1}`,
+      DEFAULT_COST_COLORS[i % DEFAULT_COST_COLORS.length],
+      DEFAULT_AFTER_LABELS[i] || '',
+      DEFAULT_STAGE_COLORS[i % DEFAULT_STAGE_COLORS.length],
+      i === numCost-1);
+  }
+}
+
+function readPrev(el){
+  const v = el.value.trim();
+  return v === '' ? null : Math.max(0, parseFloat(v) || 0);
+}
+
+function readRows(container){
+  return Array.from(container.querySelectorAll('.row')).map(r => ({
+    name: r.querySelector('.name').value.trim() || 'Unnamed',
+    value: Math.max(0, parseFloat(r.querySelector('.value').value) || 0),
+    prev: readPrev(r.querySelector('.prev')),
+    color: r.querySelector('.color').value
+  }));
+}
+
+function readCostRows(container){
+  return Array.from(container.querySelectorAll('.cost-item')).map(item => ({
+    name: item.querySelector('.name').value.trim() || 'Unnamed',
+    value: Math.max(0, parseFloat(item.querySelector('.value').value) || 0),
+    prev: readPrev(item.querySelector('.prev')),
+    color: item.querySelector('.color').value,
+    afterLabel: item.querySelector('.afterLabel').value.trim(),
+    stageColor: item.querySelector('.stageColor').value
+  }));
+}
+
+function fmt(n, unit){
+  const rounded = Math.round(n * 100) / 100;
+  const withSep = rounded.toLocaleString(undefined, {maximumFractionDigits: 2});
+  return unit ? `${unit}${withSep}` : withSep;
+}
+
+// Ribbon built from a bezier centerline; the two edges are the centerline offset up/down (in y)
+// by half the band's thickness, so the edges can never cross or fold over.
+function bezierRibbon(P0, P1, P2, P3, w0, w1, steps){
+  steps = steps || 24;
+  function point(t){
+    const mt = 1-t;
+    const x = mt*mt*mt*P0.x + 3*mt*mt*t*P1.x + 3*mt*t*t*P2.x + t*t*t*P3.x;
+    const y = mt*mt*mt*P0.y + 3*mt*mt*t*P1.y + 3*mt*t*t*P2.y + t*t*t*P3.y;
+    return {x,y};
+  }
+  const top = [], bottom = [];
+  for(let i=0;i<=steps;i++){
+    const t = i/steps;
+    const c = point(t);
+    const w = w0 + (w1-w0)*t;
+    top.push({x: c.x, y: c.y - w/2});
+    bottom.push({x: c.x, y: c.y + w/2});
+  }
+  let d = `M ${top[0].x},${top[0].y} `;
+  for(let i=1;i<top.length;i++) d += `L ${top[i].x},${top[i].y} `;
+  for(let i=bottom.length-1;i>=0;i--) d += `L ${bottom[i].x},${bottom[i].y} `;
+  d += 'Z';
+  return d;
+}
+
+// Standard left-to-right sankey link: leaves and arrives horizontally, S-bend in the middle.
+// Used for revenue merges, the continuing flow AND the cost peel-offs (which now end at the
+// same x as the following subtotal, sitting below it, so they read as a gentle diagonal).
+function ribbonPath(x0, yc0, w0, x1, yc1, w1, steps){
+  const xm = (x0 + x1) / 2;
+  return bezierRibbon({x:x0,y:yc0}, {x:xm,y:yc0}, {x:xm,y:yc1}, {x:x1,y:yc1}, w0, w1, steps);
+}
+
+function ns(tag){ return document.createElementNS('http://www.w3.org/2000/svg', tag); }
+
+function render(){
+  const revenues = readRows(revRows);
+  const costs = readCostRows(costRows);
+  const netLabel = document.getElementById('netLabel').value.trim() || 'Net Result';
+  const netColor = document.getElementById('netColor').value;
+  const totalLabel = document.getElementById('totalLabel').value.trim() || 'Total Revenue';
+  const totalColor = document.getElementById('totalColor').value;
+  const unit = document.getElementById('unit').value;
+  const companyName = document.getElementById('companyName').value.trim();
+  const periodLabel = document.getElementById('periodLabel').value.trim();
+  const compLabel = document.getElementById('compLabel').value.trim();
+
+  const totalRevenue = revenues.reduce((s,r)=>s+r.value, 0);
+  if(totalRevenue <= 0){
+    statusMsg.textContent = 'Enter at least one revenue amount greater than zero.';
+    return;
+  }
+
+  // ---- current period: cascading stage values, clamped at zero ----
+  const stageValues = [totalRevenue];
+  const costActual = [];
+  for(const c of costs){
+    const prev = stageValues[stageValues.length-1];
+    const taken = Math.min(c.value, prev);
+    costActual.push(taken);
+    stageValues.push(Math.max(0, prev - taken));
+  }
+  const netResult = stageValues[stageValues.length-1];
+  const totalCosts = costActual.reduce((s,v)=>s+v,0);
+  const numStages = stageValues.length;
+
+  // ---- comparison period: same cascade on the "Prior" column (null = not provided) ----
+  const prevTotal = revenues.every(r => r.prev !== null) ? revenues.reduce((s,r)=>s+r.prev, 0) : null;
+  const prevStages = [prevTotal];
+  const prevCost = [];
+  costs.forEach((c, i) => {
+    const ps = prevStages[i];
+    if(c.prev === null){ prevCost.push(null); prevStages.push(null); return; }
+    const taken = ps === null ? c.prev : Math.min(c.prev, ps);
+    prevCost.push(taken);
+    prevStages.push(ps === null ? null : Math.max(0, ps - taken));
+  });
+
+  // % change vs the (single, global) comparison period; for costs an increase is "bad"
+  function pctInfo(cur, prev, invert){
+    if(prev === null || prev === undefined || prev <= 0) return null;
+    const p = (cur - prev) / prev * 100;
+    const abs = Math.abs(p);
+    let arrow = '', sign = '', col = NEUTRAL;
+    if(abs >= 0.05){
+      const up = p > 0;
+      arrow = up ? '▲ ' : '▼ ';
+      sign = up ? '+' : '−';
+      col = (invert ? !up : up) ? GOOD : BAD;
+    }
+    return { text: `${arrow}${sign}${abs.toFixed(1)}%${compLabel ? ' ' + compLabel : ''}`, color: col };
+  }
+
+  // stage colors: Total Revenue, each cost's stage color, and the net color at the end
+  const stageColors = [totalColor];
+  for(let k=1;k<numStages-1;k++) stageColors.push(costs[k-1].stageColor);
+  stageColors.push(netColor);
+
+  // ---- layout constants ----
+  const nodeW = 18;
+  const titleAreaHeight = (companyName || periodLabel) ? 70 : 0;
+  const marginTop = 96 + titleAreaHeight;
+  const marginLeft = 150;
+  const marginRight = 170;
+  const chartHeight = 340;
+  const revGap = 24;
+  const revToStageGap = 170;
+  const stageGap = 140;
+  const costDrop = 46;      // how far below the following subtotal's bottom edge a cost node sits
+  const minCostNodeH = 4;   // only a safety floor for near-zero costs; ribbon and box keep the same true width
+
+  const scale = chartHeight / totalRevenue;
+  const revColumnHeight = totalRevenue * scale + revGap * (revenues.length - 1);
+  const contentH = Math.max(chartHeight, revColumnHeight);
+  const centerY = marginTop + contentH / 2;
+
+  const revX = marginLeft;
+  const stageX = [];
+  for(let k=0;k<numStages;k++) stageX.push(revX + nodeW + revToStageGap + k*(nodeW + stageGap));
+  const stageH = stageValues.map(v => v*scale);
+  // Revenue sources drop into Total Revenue by `dropTop` (the outer ribbon's shift over revToStageGap px).
+  // Each continuing-flow segment then rises by that same amount, scaled to its own horizontal run, so it
+  // has the same slope and the same S-curve as the revenue ribbons, flipped vertically. The chart's
+  // overall height therefore follows from the number of stages; it is re-centered further below.
+  const topY = centerY - revColumnHeight / 2;
+  const stage0Top = centerY - stageH[0] / 2;
+  const dropTop = stage0Top - topY;
+  const rise = dropTop * stageGap / revToStageGap;
+  const stageY0 = stageH.map((h, k) => stage0Top - k * rise);
+
+  const width = stageX[numStages-1] + nodeW + marginRight;
+
+  // cost sinks: x lines up with the FOLLOWING subtotal, y sits below that subtotal
+  // (+ rise keeps the peel-off ribbons dropping by the same amount as before)
+  const costGeom = [];
+  for(let k=0;k<costs.length;k++){
+    if(costActual[k] > 0){
+      const h = Math.max(costActual[k] * scale, minCostNodeH);
+      const x = stageX[k+1];
+      const y = stageY0[k+1] + stageH[k+1] + costDrop + rise;
+      costGeom.push({...costs[k], x, y, h, actual: costActual[k], k});
+    } else {
+      costGeom.push(null);
+    }
+  }
+
+  // ---- vertical extent of everything drawn (bars + labels), so the whole chart can be centered ----
+  let minY = Infinity, maxY = -Infinity;
+  const ext = (a, b) => { minY = Math.min(minY, a); maxY = Math.max(maxY, b); };
+  let rc = centerY - revColumnHeight / 2;
+  revenues.forEach(r => {
+    const h = r.value * scale, cy = rc + h/2;
+    ext(Math.min(rc, cy - 30), Math.max(rc + h, cy + 42));
+    rc += h + revGap;
+  });
+  for(let k=0;k<numStages;k++){
+    ext(stageY0[k], stageY0[k] + stageH[k]);
+    const labeled = k === 0 || k === numStages-1 || !!costs[k-1].afterLabel;
+    if(labeled){
+      const lines = pctInfo(stageValues[k], prevStages[k], false) ? 3 : 2;
+      ext(stageY0[k] - 9 - (lines-1)*16 - 15, stageY0[k]);
+    }
+  }
+  costGeom.forEach(c => { if(c) ext(Math.min(c.y, c.y + c.h/2 - 30), Math.max(c.y + c.h, c.y + c.h/2 + 42)); });
+
+  const PAD = 44;   // equal white space above and below the chart body
+  const dy = titleAreaHeight + PAD - minY;
+  const height = titleAreaHeight + PAD + (maxY - minY) + PAD;
+
+  svg.setAttribute('width', width);
+  svg.setAttribute('height', height);
+  svg.setAttribute('viewBox', `0 0 ${width} ${height}`);
+  svg.setAttribute('font-family', FONT);
+  svg.innerHTML = '';
+
+  if(titleAreaHeight > 0){
+    const titleText = [companyName, periodLabel].filter(Boolean).join(' — ');
+    const title = ns('text');
+    title.setAttribute('x', width/2);
+    title.setAttribute('y', 34);
+    title.setAttribute('text-anchor', 'middle');
+    title.setAttribute('font-size', '20');
+    title.setAttribute('font-weight', '600');
+    title.setAttribute('fill', '#1b2430');
+    title.textContent = titleText;
+    svg.appendChild(title);
+
+    const subtitle = ns('text');
+    subtitle.setAttribute('x', width/2);
+    subtitle.setAttribute('y', 56);
+    subtitle.setAttribute('text-anchor', 'middle');
+    subtitle.setAttribute('font-size', '13');
+    subtitle.setAttribute('fill', '#5b6675');
+    [[totalLabel, totalRevenue], ['Total costs', totalCosts], [netLabel, netResult]].forEach((it, i) => {
+      const lab = ns('tspan');
+      if(i > 0) lab.setAttribute('dx', '64');   // wide gap between the three figures
+      lab.textContent = it[0] + ': ';
+      subtitle.appendChild(lab);
+      const val = ns('tspan');
+      val.setAttribute('font-weight', '700');
+      val.setAttribute('fill', '#1b2430');
+      val.textContent = fmt(it[1], unit);
+      subtitle.appendChild(val);
+    });
+    svg.appendChild(subtitle);
+
+    const sep = ns('line');
+    sep.setAttribute('x1', 20);
+    sep.setAttribute('x2', width - 20);
+    sep.setAttribute('y1', 68);
+    sep.setAttribute('y2', 68);
+    sep.setAttribute('stroke', '#d8dee6');
+    sep.setAttribute('stroke-width', '1');
+    svg.appendChild(sep);
+  }
+
+  // --- revenue nodes: separated by gaps, block centered on centerY ---
+  let yCursor = centerY - revColumnHeight / 2;
+  const revNodeGeom = [];
+  revenues.forEach(r => {
+    const h = r.value * scale;
+    revNodeGeom.push({...r, y0: yCursor, h});
+    yCursor += h + revGap;
+  });
+
+  // ---- links ----
+  const gChart = ns('g');
+  gChart.setAttribute('transform', `translate(0,${dy})`);
+  svg.appendChild(gChart);
+  const gLinks = ns('g');
+  gChart.appendChild(gLinks);
+
+  // revenue sources converge into contiguous slices of Total Revenue
+  let stage0Cursor = stageY0[0];
+  revNodeGeom.forEach(r => {
+    const p = ns('path');
+    p.setAttribute('d', ribbonPath(revX+nodeW, r.y0 + r.h/2, r.h, stageX[0], stage0Cursor + r.h/2, r.h));
+    p.setAttribute('fill', r.color);
+    p.setAttribute('opacity', '0.55');
+    gLinks.appendChild(p);
+    stage0Cursor += r.h;
+  });
+
+  for(let k=0;k<numStages-1;k++){
+    const x0 = stageX[k] + nodeW;
+    const x1 = stageX[k+1];
+    const remainH = stageH[k+1];
+
+    // continuing flow, tinted to the destination stage's color
+    if(remainH > 0){
+      const p = ns('path');
+      p.setAttribute('d', ribbonPath(x0, stageY0[k] + remainH/2, remainH, x1, stageY0[k+1] + remainH/2, remainH));
+      p.setAttribute('fill', stageColors[k+1]);
+      p.setAttribute('opacity', '0.5');
+      gLinks.appendChild(p);
+    }
+
+    // cost peel-off: one unified piece from the bottom of the band, ending at the sink node
+    // that lines up with the next subtotal (below it)
+    const g = costGeom[k];
+    if(g){
+      const peelH = stageH[k] - remainH;
+      const peelTop = stageY0[k] + remainH;
+      const p = ns('path');
+      p.setAttribute('d', ribbonPath(x0, peelTop + peelH/2, Math.max(peelH,1), g.x, g.y + g.h/2, g.h));
+      p.setAttribute('fill', costs[k].color);
+      p.setAttribute('opacity', '0.55');
+      gLinks.appendChild(p);
+    }
+  }
+
+  // ---- nodes on top ----
+  const gNodes = ns('g');
+  gChart.appendChild(gNodes);
+
+  function addText(x, y, anchor, size, weight, fill, str){
+    // two passes: a white halo underneath (keeps labels readable over ribbons), then the fill on top
+    [true, false].forEach(halo => {
+      const t = ns('text');
+      t.setAttribute('x', x);
+      t.setAttribute('y', y);
+      t.setAttribute('text-anchor', anchor);
+      t.setAttribute('font-size', size);
+      t.setAttribute('font-weight', weight);
+      t.setAttribute('font-family', FONT);
+      if(halo){
+        t.setAttribute('fill', '#ffffff');
+        t.setAttribute('stroke', '#ffffff');
+        t.setAttribute('stroke-width', '3.5');
+        t.setAttribute('stroke-linejoin', 'round');
+      } else {
+        t.setAttribute('fill', fill);
+      }
+      t.textContent = str;
+      gNodes.appendChild(t);
+    });
+  }
+
+  // label = bold colored value, node name, then % change vs comparison period
+  function drawNode(x, y, h, color, name, value, side, pct){
+    const rect = ns('rect');
+    rect.setAttribute('x', x);
+    rect.setAttribute('y', y);
+    rect.setAttribute('width', nodeW);
+    rect.setAttribute('height', Math.max(h,1));
+    rect.setAttribute('fill', color);
+    rect.setAttribute('rx', 2);
+    gNodes.appendChild(rect);
+
+    const lines = pct ? 3 : 2;
+    const lineH = 16;
+    let lx, anchor, by;
+    if(side === 'top'){
+      // centered above the bar; the last line sits just above the bar's top edge
+      lx = x + nodeW/2;
+      anchor = 'middle';
+      by = y - 9 - (lines-1)*lineH;
+    } else {
+      const labelRight = side === 'right' ? true : side === 'left' ? false : (x >= width/2);
+      lx = x + (labelRight ? nodeW+8 : -8);
+      anchor = labelRight ? 'start' : 'end';
+      const cy = y + Math.max(h,1)/2;
+      by = cy - (lines-1)*lineH/2 + 4;
+    }
+
+    addText(lx, by, anchor, 14, 700, shade(color, 0.3), fmt(value, unit));
+    addText(lx, by + lineH, anchor, 12.5, 600, '#1b2430', name);
+    if(pct) addText(lx, by + 2*lineH, anchor, 11, 600, pct.color, pct.text);
+  }
+
+  revNodeGeom.forEach(r => drawNode(revX, r.y0, r.h, r.color, r.name, r.value, undefined, pctInfo(r.value, r.prev, false)));
+
+  drawNode(stageX[0], stageY0[0], stageH[0], stageColors[0], totalLabel, stageValues[0], 'top', pctInfo(stageValues[0], prevStages[0], false));
+  for(let k=1;k<numStages-1;k++){
+    const afterLabel = costs[k-1].afterLabel;
+    if(afterLabel){
+      drawNode(stageX[k], stageY0[k], stageH[k], stageColors[k], afterLabel, stageValues[k], 'top', pctInfo(stageValues[k], prevStages[k], false));
+    } else {
+      const rect = ns('rect');
+      rect.setAttribute('x', stageX[k]);
+      rect.setAttribute('y', stageY0[k]);
+      rect.setAttribute('width', nodeW);
+      rect.setAttribute('height', Math.max(stageH[k],1));
+      rect.setAttribute('fill', stageColors[k]);
+      rect.setAttribute('rx', 2);
+      gNodes.appendChild(rect);
+    }
+  }
+  drawNode(stageX[numStages-1], stageY0[numStages-1], stageH[numStages-1], netColor, netLabel, netResult, 'top', pctInfo(netResult, prevStages[numStages-1], false));
+
+  // cost nodes: labels always to the right of the box; a cost going up is shown red
+  costGeom.forEach(c => {
+    if(!c) return;
+    drawNode(c.x, c.y, c.h, c.color, c.name, c.actual, 'right', pctInfo(c.actual, prevCost[c.k], true));
+  });
+
+  statusMsg.textContent = '';
+}
+
+function downloadPNG(){
+  const serializer = new XMLSerializer();
+  const svgStr = serializer.serializeToString(svg);
+  const svgBlob = new Blob([svgStr], {type:'image/svg+xml;charset=utf-8'});
+  const url = URL.createObjectURL(svgBlob);
+  const img = new Image();
+  img.onload = function(){
+    const scale = 2; // higher-res export
+    const canvas = document.createElement('canvas');
+    canvas.width = svg.width.baseVal.value * scale;
+    canvas.height = svg.height.baseVal.value * scale;
+    const ctx = canvas.getContext('2d');
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0,0,canvas.width,canvas.height);
+    ctx.scale(scale, scale);
+    ctx.drawImage(img, 0, 0);
+    URL.revokeObjectURL(url);
+    canvas.toBlob(function(blob){
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = 'sankey-chart.png';
+      a.click();
+    });
+  };
+  img.src = url;
+}
+
+// ---------- saved settings ----------
+const STORE_KEY = 'sankeyBuilderSettings_v1';
+
+function collectSettings(){
+  const g = id => document.getElementById(id).value;
+  return {
+    companyName: g('companyName'), periodLabel: g('periodLabel'), compLabel: g('compLabel'),
+    netLabel: g('netLabel'), totalLabel: g('totalLabel'), netColor: g('netColor'), totalColor: g('totalColor'), unit: g('unit'),
+    revenues: Array.from(revRows.querySelectorAll('.row')).map(r => ({
+      name: r.querySelector('.name').value, value: r.querySelector('.value').value,
+      prev: r.querySelector('.prev').value, color: r.querySelector('.color').value
+    })),
+    costs: Array.from(costRows.querySelectorAll('.cost-item')).map(it => ({
+      name: it.querySelector('.name').value, value: it.querySelector('.value').value,
+      prev: it.querySelector('.prev').value, color: it.querySelector('.color').value,
+      afterLabel: it.querySelector('.afterLabel').value, stageColor: it.querySelector('.stageColor').value
+    }))
+  };
+}
+
+function applySettings(s){
+  const set = (id, v) => { if(v !== undefined && v !== null) document.getElementById(id).value = v; };
+  ['companyName','periodLabel','compLabel','netLabel','totalLabel','netColor','totalColor','unit'].forEach(id => set(id, s[id]));
+  const revs = Array.isArray(s.revenues) && s.revenues.length ? s.revenues : null;
+  const cs = Array.isArray(s.costs) && s.costs.length ? s.costs : null;
+  if(revs) document.getElementById('numRev').value = Math.min(10, revs.length);
+  if(cs) document.getElementById('numCost').value = Math.min(10, cs.length);
+  buildRows();
+  if(revs) Array.from(revRows.querySelectorAll('.row')).forEach((r, i) => {
+    const x = revs[i]; if(!x) return;
+    r.querySelector('.name').value = x.name; r.querySelector('.value').value = x.value;
+    r.querySelector('.prev').value = x.prev; r.querySelector('.color').value = x.color;
+  });
+  if(cs) Array.from(costRows.querySelectorAll('.cost-item')).forEach((it, i) => {
+    const x = cs[i]; if(!x) return;
+    it.querySelector('.name').value = x.name; it.querySelector('.value').value = x.value;
+    it.querySelector('.prev').value = x.prev; it.querySelector('.color').value = x.color;
+    if(!it.querySelector('.afterLabel').disabled) it.querySelector('.afterLabel').value = x.afterLabel || '';
+    if(x.stageColor && !it.querySelector('.stageColor').disabled) it.querySelector('.stageColor').value = x.stageColor;
+  });
+}
+
+function saveSettings(){
+  try{
+    localStorage.setItem(STORE_KEY, JSON.stringify(collectSettings()));
+    statusMsg.textContent = 'Settings saved in this browser.';
+  }catch(e){
+    statusMsg.textContent = 'Could not save in the browser here. Use "Export to file" instead.';
+  }
+}
+
+function loadSaved(){
+  try{
+    const raw = localStorage.getItem(STORE_KEY);
+    if(!raw) return false;
+    applySettings(JSON.parse(raw));
+    return true;
+  }catch(e){ return false; }
+}
+
+function clearSaved(){
+  try{ localStorage.removeItem(STORE_KEY); }catch(e){}
+  statusMsg.textContent = 'Saved settings cleared (the fields on screen are unchanged).';
+}
+
+function exportSettings(){
+  const blob = new Blob([JSON.stringify(collectSettings(), null, 2)], {type:'application/json'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'sankey-settings.json';
+  a.click();
+}
+
+function importSettings(file){
+  const reader = new FileReader();
+  reader.onload = () => {
+    try{
+      applySettings(JSON.parse(reader.result));
+      render();
+      statusMsg.textContent = 'Settings imported.';
+    }catch(e){
+      statusMsg.textContent = 'That file is not a valid settings file.';
+    }
+  };
+  reader.readAsText(file);
+}
+
+document.getElementById('btnSave').addEventListener('click', saveSettings);
+document.getElementById('btnClear').addEventListener('click', clearSaved);
+document.getElementById('btnExport').addEventListener('click', exportSettings);
+document.getElementById('btnImport').addEventListener('click', () => document.getElementById('importFile').click());
+document.getElementById('importFile').addEventListener('change', e => {
+  if(e.target.files[0]) importSettings(e.target.files[0]);
+  e.target.value = '';
+});
+
+document.getElementById('btnBuildRows').addEventListener('click', buildRows);
+document.getElementById('btnRender').addEventListener('click', render);
+document.getElementById('btnPNG').addEventListener('click', downloadPNG);
+
+// init: restore the last saved settings if there are any
+if(!loadSaved()) buildRows();
+render();
+</script>
+</body>
+</html>
